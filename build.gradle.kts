@@ -1,8 +1,13 @@
+import com.github.gradle.node.npm.task.NpmTask
+import org.gradle.kotlin.dsl.register
+
 plugins {
-    kotlin("jvm") version "1.9.25"
-    kotlin("plugin.spring") version "1.9.25"
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.github.node-gradle.node") version "7.0.1"
+
+    kotlin("jvm") version "1.9.25"
+    kotlin("plugin.spring") version "1.9.25"
 }
 
 group = "com.test"
@@ -13,6 +18,8 @@ java {
         languageVersion = JavaLanguageVersion.of(17)
     }
 }
+
+val buildEnv = System.getProperty("build.env") ?: "local"
 
 repositories {
     mavenCentral()
@@ -52,9 +59,45 @@ dependencies {
 kotlin {
     compilerOptions {
         freeCompilerArgs.addAll("-Xjsr305=strict")
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
+}
+
+node {
+    version.set("22.9.0")
+    npmVersion.set("10.2.2")
+    npmInstallCommand.set("install")
+    distBaseUrl.set("https://nodejs.org/dist")
+    download.set(true)
+    workDir.set(file("${project.projectDir}/frontend/.cache/nodejs"))
+    npmWorkDir.set(file("${project.projectDir}/frontend/.cache/npm"))
+    nodeProjectDir.set(file("${project.projectDir}/frontend"))
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+tasks.register<Delete>("deleteVueArtifact") {
+    delete("${project.projectDir}/src/main/resources/static")
+}
+
+tasks.register<NpmTask>("npmBuild") {
+    dependsOn("deleteVueArtifact", tasks.npmInstall)
+    println("buildEnv = $buildEnv")
+    npmCommand.set(listOf("run", "build:$buildEnv"))
+}
+
+tasks.clean {
+    dependsOn("deleteVueArtifact")
+}
+
+tasks.processResources {
+    if (buildEnv != "local") {
+        dependsOn("npmBuild")
+    }
+}
+
+tasks.bootJar {
+    archiveFileName.set("app.jar")
 }
